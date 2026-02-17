@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Ejemplo GTFS</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        #map {
+            height: 100%;
+            width: 100%;
+            position: absolute;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map">
+
+    </div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-ajax/2.1.0/leaflet.ajax.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-realtime/2.2.0/leaflet-realtime.min.js"></script>
+    <script>
+        var map = L.map('map');
+
+        map.setView([41.3869, 2.1701], 11);  
+
+        L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        //var geojsonParadas = new L.GeoJSON.AJAX('/stops/',{
+            //pointToLayer: function (feature, latlng) {                    
+                //return new L.CircleMarker(latlng, {
+                    //radius: 5,
+                    //fillColor: "#A30000",
+                   //color: "#A30000",
+                    //weight: 1,
+                    //opacity: 1,
+                    //fillOpacity: 0.8
+                //});
+            //},
+            //onEachFeature: function (feature, layer) {
+                //layer.bindPopup(feature.properties.stop_name);
+            //}
+        //}).addTo(map);
+
+        var geojsonLineas = new L.GeoJSON.AJAX('/shapes/',{
+            style: function (feature) {
+                return {
+                    color: "#" + (feature.properties.route_color || "FF0000"),
+                    weight: 3,
+                    opacity: 1,
+                };
+            },
+            onEachFeature: function (feature, layer) {
+                layer.bindPopup(feature.properties.shape_id);
+                    "Route: " + feature.properties.route_id +
+                    "<br>Shape: " + feature.properties.shape_id
+            }
+        });
+        
+        geojsonLineas.on('data:loaded', function () {
+            map.fitBounds(geojsonLineas.getBounds());
+        });
+
+        geojsonLineas.addTo(map);
+
+        let lineasInfo;
+        
+        async function cargarTrenes() {
+            const trenesURL = "https://dadesobertes.fgc.cat/api/explore/v2.1/catalog/datasets/posicionament-dels-trens/exports/geojson?limit=-1&timezone=UTC&use_labels=false&compressed=false&epsg=4326";
+            const lineasURL = "https://dadesobertes.fgc.cat/api/explore/v2.1/catalog/datasets/lineas-red-fgc/records?limit=20";
+      
+            const resp = await fetch(lineasURL);
+            lineasInfo = await resp.json();
+
+            const trenes = L.realtime(trenesURL, {
+                interval: 2 * 1000,
+                pointToLayer: function(geoJsonPoint, latlng) {
+                    return L.circleMarker(latlng);
+                },
+                style: function (feature) {
+                    return {
+                        radius: 5,
+                        color: getColorLinea(feature.properties.lin),
+                        fillColor: getColorLinea(feature.properties.lin),
+                        fillOpacity: 1
+                    };
+                }
+            }).addTo(map);
+        }
+
+        function getColorLinea(idLinea) {
+            const rutas = lineasInfo.results;
+
+            const ruta = rutas.find(r => 
+               r.route_id.toUpperCase() === idLinea.toUpperCase()
+            );
+
+            if (!ruta) {
+                return "#000000"; // color por defecto      
+            }
+
+            return "#" + ruta.route_color;
+        }
+        
+        cargarTrenes();
+    </script>
+</body>
+</html>
