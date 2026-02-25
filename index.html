@@ -1,115 +1,149 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Ejemplo GTFS</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <style>
-        #map {
-            height: 100%;
-            width: 100%;
-            position: absolute;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Mapa Rodalies en tiempo real</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-realtime/2.2.0/leaflet-realtime.min.js"></script>
+
+  <script src="https://unpkg.com/mapbox-gl@2.13.0/dist/mapbox-gl.js"></script> 
+  <link href="https://unpkg.com/mapbox-gl@2.13.0/dist/mapbox-gl.css" rel="stylesheet"/>  
+  <script src="https://unpkg.com/mapbox-gl-leaflet/leaflet-mapbox-gl.js"></script> 
+
+</script> 
+
+  <style>
+    html, body, #map {
+      height: 100%;
+      margin: 0;
+    }
+  </style>
 </head>
+
 <body>
+  <div id="map"></div>
 
-    <div id="map">
+  <script>
+    const map = L.map('map').setView([41.3869, 2.1701], 10);
 
-    </div>
+      mapboxgl.accessToken = 'PWugjwqGJtkv1gAYBrrC';
+      var gl = L.mapboxGL({
+          style: 'https://api.maptiler.com/maps/019c75be-77bb-7d27-bca6-c31ad2e6fd16/style.json?key=PWugjwqGJtkv1gAYBrrC',
+          attribution: '&copy; MapTiler &copy; OpenStreetMap contributors'
 
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-ajax/2.1.0/leaflet.ajax.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-realtime/2.2.0/leaflet-realtime.min.js"></script>
-    <script>
-        var map = L.map('map');
+    }).addTo(map);
 
-        map.setView([41.3869, 2.1701], 11);  
+ // SHAPES (líneas) con colores de ruta
 
-        L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
+const routeColors = {}; // route_id -> color
 
-        //var geojsonParadas = new L.GeoJSON.AJAX('/stops/',{
-            //pointToLayer: function (feature, latlng) {                    
-                //return new L.CircleMarker(latlng, {
-                    //radius: 5,
-                    //fillColor: "#A30000",
-                   //color: "#A30000",
-                    //weight: 1,
-                    //opacity: 1,
-                    //fillOpacity: 0.8
-                //});
-            //},
-            //onEachFeature: function (feature, layer) {
-                //layer.bindPopup(feature.properties.stop_name);
-            //}
-        //}).addTo(map);
+async function cargarShapes() {
+  const res = await fetch("/shapes");
+  const geojson = await res.json();
 
-        var geojsonLineas = new L.GeoJSON.AJAX('./shapes.json',{
-            style: function (feature) {
-                return {
-                    color: "#" + (feature.properties.route_color || "FF0000"),
-                    weight: 3,
-                    opacity: 1,
-                };
-            },
-            onEachFeature: function (feature, layer) {
-                layer.bindPopup(feature.properties.shape_id);
-                    "Route: " + feature.properties.route_id +
-                    "<br>Shape: " + feature.properties.shape_id
-            }
+  L.geoJSON(geojson, {
+    style: feature => {
+      const color = feature.properties.route_color || "000000";
+      let routeId = feature.properties.route_id  || "";
+
+      const match = routeId.match(/R[L|T]?(\d+)/i);
+          if(match) {
+            routeId = "R" + match[1];
+          } else {
+            routeId = routeId.toUpperCase();
+          }
+
+          if(routeId && color) {
+            routeColors[routeId] = "#" + color;
+          };
+      console.log("Shape route:", routeId);
+
+      return {
+        color: "#" + color,
+        weight: 4,
+        opacity: 0.8
+      };
+    }
+  }).addTo(map);
+}
+
+
+// TRENES EN TIEMPO REAL
+
+function iniciarTiempoReal() {
+
+  const trenesURL = "/api/trenes";
+
+  const realtimeLayer = L.realtime(
+    async (success, error) => {
+      try {
+        const response = await fetch(trenesURL);
+        const data = await response.json();
+
+        //console.log("Trenes:", data.entity?.length);
+
+        const features = (data.entity || [])
+          .filter(e => e.vehicle && e.vehicle.position)
+          .map(e => {
+
+            const label = e.vehicle.vehicle?.label || "";
+
+            // Extrae "R1" de "R1-25638-PLATF.(2)"
+           // const linea = label.split("-")[0].trim().toUpperCase();
+            //const color = routeColors[linea] || "#FF0000";
+
+                            const lineaMatch = label.match(/R[L|T]?(\d+)/i);
+                const lineaKey = lineaMatch ? "R" + lineaMatch[1] : "R1";
+
+                const color = routeColors[lineaKey] || "#FF0000";
+
+            return {
+              type: "Feature",
+              geometry: {
+                type: "Point",
+                coordinates: [
+                  e.vehicle.position.longitude,
+                  e.vehicle.position.latitude
+                ]
+              },
+              properties: {
+                id: e.id,
+                color: color
+              }
+            };
+          });
+
+        success({
+          type: "FeatureCollection",
+          features
         });
-        
-        geojsonLineas.on('data:loaded', function () {
-            map.fitBounds(geojsonLineas.getBounds());
-        });
 
-        geojsonLineas.addTo(map);
+      } catch (err) {
+        console.error(err);
+        error(err);
+      }
+    },
+    {
+      interval: 5000,
+      pointToLayer: (feature, latlng) =>
+     L.circleMarker(latlng, {
+          radius: 4.5,
+          color: "#2E2E2E",
+          weight: 0.5,
+          fillColor: feature.properties.color || "#FF0000",
+          fillOpacity: 1,
+        })
+    }
+  ).addTo(map);
 
-        let lineasInfo;
-        
-        async function cargarTrenes() {
-            const trenesURL = "https://dadesobertes.fgc.cat/api/explore/v2.1/catalog/datasets/posicionament-dels-trens/exports/geojson?limit=-1&timezone=UTC&use_labels=false&compressed=false&epsg=4326";
-            const lineasURL = "https://dadesobertes.fgc.cat/api/explore/v2.1/catalog/datasets/lineas-red-fgc/records?limit=20";
-      
-            const resp = await fetch(lineasURL);
-            lineasInfo = await resp.json();
+  realtimeLayer.bringToFront();
+}
+cargarShapes().then(() => {
+  iniciarTiempoReal();
+});
 
-            const trenes = L.realtime(trenesURL, {
-                interval: 2 * 1000,
-                pointToLayer: function(geoJsonPoint, latlng) {
-                    return L.circleMarker(latlng);
-                },
-                style: function (feature) {
-                    return {
-                        radius: 5,
-                        color: getColorLinea(feature.properties.lin),
-                        fillColor: getColorLinea(feature.properties.lin),
-                        fillOpacity: 1
-                    };
-                }
-            }).addTo(map);
-        }
-
-        function getColorLinea(idLinea) {
-            const rutas = lineasInfo.results;
-
-            const ruta = rutas.find(r => 
-               r.route_id.toUpperCase() === idLinea.toUpperCase()
-            );
-
-            if (!ruta) {
-                return "#000000"; // color por defecto      
-            }
-
-            return "#" + ruta.route_color;
-        }
-        
-        cargarTrenes();
-    </script>
+  </script>
 </body>
-
 </html>
