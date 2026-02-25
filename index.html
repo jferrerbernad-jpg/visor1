@@ -40,7 +40,7 @@
 const routeColors = {}; // route_id -> color
 
 async function cargarShapes() {
-  const res = await fetch("./shapes.json");
+  const res = await fetch("./shapes1.json");
   const geojson = await res.json();
 
   L.geoJSON(geojson, {
@@ -147,4 +147,5 @@ cargarShapes().then(() => {
   </script>
 </body>
 </html>
+
 
