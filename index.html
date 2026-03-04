@@ -130,7 +130,7 @@ function iniciarTiempoReal() {
       pointToLayer: (feature, latlng) =>
      L.circleMarker(latlng, {
           radius: 4.5,
-          color: "#00000",
+          color: "#000000",
           weight: 0.5,
           fillColor: feature.properties.color || "#FF0000",
           fillOpacity: 1,
@@ -147,6 +147,7 @@ cargarShapes().then(() => {
   </script>
 </body>
 </html>
+
 
 
 
